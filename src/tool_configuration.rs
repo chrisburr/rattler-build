@@ -102,6 +102,7 @@ impl BaseClient {
                 .pool_max_idle_per_host(20)
                 .user_agent(APP_USER_AGENT)
                 .read_timeout(std::time::Duration::from_secs(timeout))
+                .cookie_store(true)
         };
 
         let client = reqwest_middleware::ClientBuilder::new(

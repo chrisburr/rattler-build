@@ -1,0 +1,15 @@
+package:
+  name: sourceforge-test
+  version: 0.1.0
+
+source:
+  - url: https://sourceforge.net/projects/arma/files/armadillo-15.2.1.tar.xz
+    sha256: a5b8109da3c169802f51a14d3bd1246395c24bbca55601760b0c96a3c0b2f8fa
+
+build:
+  script:
+    - if: unix
+      then:
+        - test -d armadillo-15.2.1
+      else:
+        - if not exist "armadillo-15.2.1\" exit 1
