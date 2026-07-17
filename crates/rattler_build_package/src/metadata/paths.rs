@@ -198,8 +198,8 @@ impl PathsJsonBuilder {
                         placeholder,
                         // Not yet recorded at build time; installers locate
                         // occurrences by searching, as for pre-CEP packages.
-                        offsets: None,
-                        shebang_length: None,
+                        experimental_offsets: None,
+                        experimental_shebang_length: None,
                     }));
                 }
                 None => FileMode::Text,
@@ -221,8 +221,8 @@ impl PathsJsonBuilder {
                     placeholder: self.prefix.to_string_lossy().to_string(),
                     // Not yet recorded at build time; installers locate
                     // occurrences by searching, as for pre-CEP packages.
-                    offsets: None,
-                    shebang_length: None,
+                    experimental_offsets: None,
+                    experimental_shebang_length: None,
                 }));
             }
         }
