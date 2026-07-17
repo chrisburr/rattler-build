@@ -593,8 +593,9 @@ async fn upload_to_artifactory(
     // Remove the channel path from the URL to get just the base server URL
     server_url.set_path("");
 
-    // Create ArtifactoryData with server URL, channel, and optional token
-    let artifactory_data = ArtifactoryData::new(server_url, channel, None);
+    // Create an unauthenticated ArtifactoryData; rattler_upload resolves
+    // credentials from its authentication storage.
+    let artifactory_data = ArtifactoryData::new(server_url, channel);
 
     // Upload packages
     upload_package_to_artifactory(&auth_storage, &package_paths.to_vec(), artifactory_data)
