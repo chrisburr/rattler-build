@@ -196,6 +196,10 @@ impl PathsJsonBuilder {
                     return Ok(Some(PrefixPlaceholder {
                         file_mode: FileMode::Text,
                         placeholder,
+                        // Not yet recorded at build time; installers locate
+                        // occurrences by searching, as for pre-CEP packages.
+                        offsets: None,
+                        shebang_length: None,
                     }));
                 }
                 None => FileMode::Text,
@@ -215,6 +219,10 @@ impl PathsJsonBuilder {
                 return Ok(Some(PrefixPlaceholder {
                     file_mode: FileMode::Binary,
                     placeholder: self.prefix.to_string_lossy().to_string(),
+                    // Not yet recorded at build time; installers locate
+                    // occurrences by searching, as for pre-CEP packages.
+                    offsets: None,
+                    shebang_length: None,
                 }));
             }
         }

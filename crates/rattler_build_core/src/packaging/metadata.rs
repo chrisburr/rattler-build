@@ -212,6 +212,10 @@ pub fn create_prefix_placeholder(
     Ok(has_prefix.map(|placeholder| PrefixPlaceholder {
         file_mode,
         placeholder,
+        // Not yet recorded at build time; installers locate occurrences by
+        // searching, exactly as for pre-CEP packages.
+        offsets: None,
+        shebang_length: None,
     }))
 }
 
