@@ -214,8 +214,8 @@ pub fn create_prefix_placeholder(
         placeholder,
         // Not yet recorded at build time; installers locate occurrences by
         // searching, exactly as for pre-CEP packages.
-        offsets: None,
-        shebang_length: None,
+        experimental_offsets: None,
+        experimental_shebang_length: None,
     }))
 }
 
