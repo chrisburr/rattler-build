@@ -119,7 +119,7 @@ impl SystemTools {
         let which = |tool: &str| -> Result<PathBuf, which::Error> {
             if let Some(build_prefix) = &self.build_prefix {
                 let build_prefix_activator =
-                    Activator::from_path(build_prefix, shell::Bash::default(), Platform::current())
+                    Activator::from_path(build_prefix, shell::Bash::default(), Platform::current().expect("host platform"))
                         .unwrap();
 
                 let paths = std::env::join_paths(build_prefix_activator.paths).ok();

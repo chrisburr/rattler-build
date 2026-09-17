@@ -610,10 +610,10 @@ mod tests {
             PathBuf::from("."),
             Path::new("."),
             ExecutionContext::shared(
-                RuntimeEnv::for_test(Platform::current()),
+                RuntimeEnv::for_test(Platform::current().expect("host platform")),
                 Path::new("."),
-                Platform::current(),
-                Platform::current(),
+                Platform::current().expect("host platform"),
+                Platform::current().expect("host platform"),
             ),
             None,
             EnvironmentIsolation::default(),

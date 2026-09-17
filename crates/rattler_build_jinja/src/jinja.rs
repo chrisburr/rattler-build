@@ -67,7 +67,7 @@ pub struct JinjaConfig {
 
 impl Default for JinjaConfig {
     fn default() -> Self {
-        let current = Platform::current();
+        let current = Platform::current().expect("host platform");
         Self {
             target_platform: current,
             build_platform: current,
@@ -201,8 +201,9 @@ impl Jinja {
 
         let mut seen_families = HashSet::new();
         for platform in Platform::iter() {
-            // Skip noarch and unknown platforms
-            if matches!(platform, Platform::NoArch | Platform::Unknown) {
+            // Skip noarch; upstream dropped the Unknown sentinel in favour of
+            // `Platform::current().expect("host platform")` returning None, so it is no longer iterated.
+            if matches!(platform, Platform::NoArch) {
                 continue;
             }
 

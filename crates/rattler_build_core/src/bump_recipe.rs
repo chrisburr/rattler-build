@@ -572,9 +572,9 @@ pub fn build_url_with_version(
 ) -> Result<String, BumpRecipeError> {
     // Create a JinjaConfig with default platform settings
     let jinja_config = JinjaConfig {
-        target_platform: Platform::current(),
-        host_platform: Platform::current(),
-        build_platform: Platform::current(),
+        target_platform: Platform::current().expect("host platform"),
+        host_platform: Platform::current().expect("host platform"),
+        build_platform: Platform::current().expect("host platform"),
         variant: BTreeMap::new(),
         experimental: false,
         recipe_path: None,

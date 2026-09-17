@@ -209,7 +209,7 @@ impl Tests {
     ) -> Result<(), TestError> {
         tracing::info!("Testing commands:");
 
-        let target_platform = config.target_platform.unwrap_or(Platform::current());
+        let target_platform = config.target_platform.unwrap_or(Platform::current().expect("host platform"));
         let build_platform = config.current_platform.platform;
         let host_platform = config
             .host_platform
@@ -377,7 +377,7 @@ pub struct TestConfiguration {
 }
 
 fn configured_test_platforms(config: &TestConfiguration) -> (Platform, Platform, Platform) {
-    let target_platform = config.target_platform.unwrap_or(Platform::current());
+    let target_platform = config.target_platform.unwrap_or(Platform::current().expect("host platform"));
     let build_platform = config.current_platform.platform;
     let host_platform = config
         .host_platform
@@ -1082,7 +1082,7 @@ async fn run_commands_test(
     .wrap_err("failed to setup test environment")
     .map_err(TestError::TestEnvironmentSetup)?;
 
-    let target_platform = config.target_platform.unwrap_or(Platform::current());
+    let target_platform = config.target_platform.unwrap_or(Platform::current().expect("host platform"));
     let build_platform = config.current_platform.platform;
     let host_platform = config
         .host_platform
