@@ -15,6 +15,12 @@ use rattler_build_networking::BaseClient;
 use rattler_git::CheckoutOptions;
 use rattler_git::resolver::GitResolver;
 
+/// How many times a URL source is downloaded before the build is failed.
+pub(crate) const MAX_DOWNLOAD_ATTEMPTS: u32 = 3;
+
+/// Delay before the second download attempt, doubled for each attempt after that.
+const RETRY_BASE_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
+
 /// Result of fetching a source from the cache
 #[derive(Debug, Clone)]
 pub struct SourceResult {
@@ -281,22 +287,49 @@ impl SourceCache {
             }
         }
 
-        // Download the file
-        tracing::info!("Downloading from: {}", url);
-        let (cache_path, actual_filename) = self.download_url(url, &key).await?;
+        // Download the file and validate it, repeating the attempt when the server
+        // answered successfully but delivered nothing usable.
+        let mut attempt = 1;
+        let (cache_path, actual_filename) = loop {
+            tracing::info!("Downloading from: {}", url);
 
-        // Validate all checksums
-        for cs in checksums {
-            if let Err(mismatch) = cs.validate(&cache_path) {
-                fs_err::tokio::remove_file(&cache_path).await?;
-                return Err(CacheError::ValidationFailed {
-                    path: cache_path,
-                    expected: mismatch.expected,
-                    actual: mismatch.actual,
-                    kind: mismatch.kind.to_string(),
-                });
+            let (error, retryable) = match self.download_url(url, &key).await {
+                Ok((path, filename, downloaded)) => {
+                    match checksums.iter().find_map(|cs| cs.validate(&path).err()) {
+                        None => break (path, filename),
+                        Some(mismatch) => {
+                            fs_err::tokio::remove_file(&path).await?;
+                            (
+                                CacheError::ValidationFailed {
+                                    path,
+                                    expected: mismatch.expected,
+                                    actual: mismatch.actual,
+                                    kind: mismatch.kind.to_string(),
+                                },
+                                is_empty_response(downloaded),
+                            )
+                        }
+                    }
+                }
+                Err(err) => {
+                    let retryable = matches!(err, CacheError::IncompleteDownload { .. });
+                    (err, retryable)
+                }
+            };
+
+            if !retryable || attempt >= MAX_DOWNLOAD_ATTEMPTS {
+                return Err(error);
             }
-        }
+
+            let backoff = RETRY_BASE_DELAY * 2u32.pow(attempt - 1);
+            tracing::warn!(
+                "Download from {url} did not deliver the expected data ({error}); \
+                 retrying in {backoff:?} (attempt {next} of {MAX_DOWNLOAD_ATTEMPTS})",
+                next = attempt + 1,
+            );
+            tokio::time::sleep(backoff).await;
+            attempt += 1;
+        };
 
         // Perform attestation verification if configured
         if let Some(attestation_config) = attestation {
@@ -353,7 +386,7 @@ impl SourceCache {
         &self,
         url: &url::Url,
         key: &str,
-    ) -> Result<(PathBuf, Option<String>), CacheError> {
+    ) -> Result<(PathBuf, Option<String>, u64), CacheError> {
         // Determine filename
         let filename = url
             .path_segments()
@@ -372,8 +405,8 @@ impl SourceCache {
                 return Err(CacheError::FileNotFound(source_path));
             }
 
-            fs_err::tokio::copy(&source_path, &cache_path).await?;
-            return Ok((cache_path, Some(filename.to_string())));
+            let copied = fs_err::tokio::copy(&source_path, &cache_path).await?;
+            return Ok((cache_path, Some(filename.to_string()), copied));
         }
 
         // Download from HTTP/HTTPS - use the appropriate client based on SSL settings
@@ -417,7 +450,20 @@ impl SourceCache {
 
         use futures::StreamExt;
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
+            // The retry middleware has already handed back a successful response by this
+            // point, so a body that dies mid-stream is invisible to it and has to be
+            // caught here instead.
+            let chunk = match chunk {
+                Ok(chunk) => chunk,
+                Err(err) => {
+                    let _ = fs_err::tokio::remove_file(&cache_path).await;
+                    return Err(CacheError::IncompleteDownload {
+                        url: url.to_string(),
+                        downloaded,
+                        reason: err.to_string(),
+                    });
+                }
+            };
             downloaded += chunk.len() as u64;
             file.write_all(&chunk).await?;
 
@@ -428,6 +474,20 @@ impl SourceCache {
         }
 
         file.flush().await?;
+
+        // A server can promise a length and then stop short. Catching that here keeps a
+        // truncated file from reaching checksum validation, where it would be reported as
+        // a checksum mismatch and send the user looking for a stale hash in the recipe.
+        if let Some(expected) = total_size
+            && downloaded != expected
+        {
+            fs_err::tokio::remove_file(&cache_path).await?;
+            return Err(CacheError::IncompleteDownload {
+                url: url.to_string(),
+                downloaded,
+                reason: format!("expected {expected} bytes"),
+            });
+        }
 
         // Notify completion
         if let Some(handler) = &self.progress_handler {
@@ -449,7 +509,7 @@ impl SourceCache {
             cache_path
         };
 
-        Ok((final_path, actual_filename))
+        Ok((final_path, actual_filename, downloaded))
     }
 
     /// Check if a file should be extracted based on its filename extension
@@ -603,6 +663,22 @@ pub(crate) fn extract_filename_from_header(header_value: &str) -> Option<String>
         }
     }
     None
+}
+
+/// Whether a checksum failure looks like a download that never actually arrived.
+///
+/// The HTTP client already retries transport failures, but it only sees the HTTP
+/// exchange: a server that answers `200 OK` and then sends nothing looks like a success
+/// to it, and the problem first becomes visible here, as a checksum mismatch against a
+/// zero-length file. GitLab's `/-/archive/` endpoints generate tarballs on the fly and
+/// send the status line before generation begins, so a throttled request produces
+/// exactly this.
+///
+/// A body that arrived in full but hashes differently is far more likely to be a stale
+/// checksum in the recipe than a flaky server, so it is reported at once rather than
+/// costing repeated downloads of a large archive.
+pub(crate) fn is_empty_response(downloaded_bytes: u64) -> bool {
+    downloaded_bytes == 0
 }
 
 pub(crate) fn is_archive(name: &str) -> bool {
